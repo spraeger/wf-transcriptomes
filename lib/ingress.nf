@@ -450,7 +450,9 @@ process fastcat {
     label "ingress"
     label "wf_common"
     cpus 3
-    memory "2 GB"
+    memory "16 GB"
+    errorStrategy 'retry' 
+    maxRetries 5
     input:
         tuple val(meta), path("input")
         val extra_args
