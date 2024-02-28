@@ -450,7 +450,8 @@ process fastcat {
     label "ingress"
     label "wf_common"
     cpus 3
-    memory "16 GB"
+    time '16h'
+    memory "32 GB"
     errorStrategy 'retry' 
     maxRetries 5
     input:
