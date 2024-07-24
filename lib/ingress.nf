@@ -450,10 +450,11 @@ process fastcat {
     label "ingress"
     label "wf_common"
     cpus 3
-    time '16h'
+    time '10h'
     memory "32 GB"
     errorStrategy 'retry' 
     maxRetries 5
+    scratch true
     input:
         tuple val(meta), path("input")
         val extra_args
@@ -478,7 +479,7 @@ process fastcat {
         mv histograms/* $fastcat_stats_outdir
         # extract the run IDs from the per-read stats
         csvtk cut -tf runid $fastcat_stats_outdir/per-read-stats.tsv.gz \
-        | csvtk del-header | sort | uniq > $fastcat_stats_outdir/run_ids
+        | csvtk del-header | sort -T . | uniq > $fastcat_stats_outdir/run_ids
         """
 }
 
