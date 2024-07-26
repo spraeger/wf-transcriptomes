@@ -5,12 +5,10 @@ suppressMessages(library("GenomicFeatures"))
 suppressMessages(library("edgeR"))
 args <- commandArgs(trailingOnly=TRUE)
 ref_annotation <- args[1]
-min_samps_gene_expr <- args[2]
-min_samps_feature_expr <- args[3]
-min_gene_expr <- args[4] 
-min_feature_expr <- args[5]
-annotation_type <- args[6]
-strip_version <- args[7]
+min_samps_gene_expr <- as.numeric(args[2])
+min_samps_feature_expr <- as.numeric(args[3])
+min_gene_expr <- as.numeric(args[4]) 
+min_feature_expr <- as.numeric(args[5])
 
 cat("Loading counts, conditions and parameters.\n")
 cts <- as.matrix(read.csv("all_counts.tsv", sep="\t", row.names="Reference", stringsAsFactors=FALSE))
@@ -26,17 +24,48 @@ if(!"control" %in% coldata$condition)
        condition - unable to set reference.")
 coldata$condition <- relevel(coldata$condition, ref = "control")
 
-cat("Loading annotation database.\n")
+# a .gff annotation file extension may be gff2(gtf) or gff3 so check in files for use of = in the attribute field
+# if '=' present it is gff3 if not it is gtf.
+# see https://www.ensembl.org/info/website/upload/gff.html
+# and http://gmod.org/wiki/GFF2#Converting_GFF2_to_GFF3
+cat("Checking annotation file type.\n")
+lines <- readLines(file(ref_annotation), n=10000)
+# If transcript_id containing '=' (format eg. transcript_id=xxx)
+# annotation type is gff3
+check_file_type <- sum(grepl("transcript_id=", lines))
+if (check_file_type != 0){
+    cat("Annotation file type is gff3.\n")
+    annotation_type <- "gff3"
+} else {
+    # otherwise gtf
+    cat("Annotation file type is gtf.\n")
+    annotation_type <- "gtf"
+}
 
+# Transcript_id versions (eg. ENTXXX.1, eg. ENTXXX.2) represent how many times that transcript reference has been changed 
+# during its time in the database.
+# Not all annotation files include it as part of the transcript_id - notably Ensembl
+# The following handles this.
+cat("Checking annotation file for presence of transcript_id versions.\n")
+# Get the first transcript_id from the annotation file by parsing
+lines <- readLines(file(ref_annotation), n=100000)
+# Find transcript_ids in first 1000 lines and check if they contain dot (format eg. ENTXXX.1)
+check_version <- sum(grepl("transcript_id[^;]+\\.", lines))
+if (check_version != 0){
+        # we do not need to strip the count file rows if ref_annotation includes versions
+        cat("Annotation file transcript_ids include versions.\n")
+    } else {
+       # otherwise remove the versions
+        rownames(cts) <- lapply(rownames(cts),  sub, pattern = "\\.\\d+$", replacement = "")
+        cat("Annotation file transcript_ids do not include versions so also strip versions from the counts df.\n")
+    }
+
+cat("Loading annotation database.\n")
 txdb <- makeTxDbFromGFF(ref_annotation,  format = annotation_type)
 txdf <- select(txdb, keys(txdb,"GENEID"), "TXNAME", "GENEID")
 tab <- table(txdf$GENEID)
 txdf$ntx<- tab[match(txdf$GENEID, names(tab))]
 
-
-if (strip_version == "true"){
-  rownames(cts) <- lapply(rownames(cts),  sub, pattern = "\\.\\d+$", replacement = "")
-}
 
 cts <- cts[rownames(cts) %in% txdf$TXNAME, ] # FIXME: filter for transcripts which are in the annotation. Why they are not all there? 
 
@@ -94,7 +123,18 @@ qlf <- glmQLFTest(fit)
 edger_res <- topTags(qlf, n=nrow(y), sort.by="PValue")[[1]]
 
 pdf("de_analysis/results_dge.pdf")
-plotMD(qlf)
+
+# create status vector
+status <- ifelse(
+  qlf$PValue<0.01 & qlf$logFC>0, 
+  'up', 
+  ifelse(
+    qlf$PValue<0.01 & qlf$logFC<=0,
+    'down',
+    'notsig'
+  )
+)
+plotMD(qlf, status=status,  values=c("up","down","notsig"), hl.col=c("red","blue","black"))
 abline(h=c(-1,1), col="blue")
 plotQLDisp(fit)
 

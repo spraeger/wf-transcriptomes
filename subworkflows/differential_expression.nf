@@ -60,8 +60,6 @@ process mergeTPM {
 
 process deAnalysis {
     label "isoforms"
-    errorStrategy "retry"
-    maxRetries 3
     cpus 4
     memory "16 GB"
     input:
@@ -77,29 +75,10 @@ process deAnalysis {
         path "de_analysis/results_dexseq.tsv", emit: dexseq
         path "de_analysis", emit: de_analysis
         path "de_analysis/cpm_gene_counts.tsv", emit: cpm
-    script:
-    // Just try both annotation file type because a .gff extension may be gff2(gtf) or gff3
-    String annotation_type = "gtf"
-    String strip_version  = "false"
-    if (task.attempt == 2){
-        annotation_type = "gff3"
-        strip_version  = "false"
-        log.info("Retry deAnalysis with gff format setting.")
-    }
-    else if (task.attempt == 3){
-        annotation_type = "gff3"
-        strip_version  = "true"
-        log.info("Retry deAnalysis with gff format setting and version removal.")
-    }
-    else if (task.attempt == 4){
-        strip_version  = "true"
-        log.info("Retry deAnalysis with gtf format setting and version removal.")
-    }
-
     """
     mkdir merged
     mkdir de_analysis
-    de_analysis.R annotation.gtf $params.min_samps_gene_expr $params.min_samps_feature_expr $params.min_gene_expr $params.min_feature_expr $annotation_type $strip_version
+    de_analysis.R annotation.gtf $params.min_samps_gene_expr $params.min_samps_feature_expr $params.min_gene_expr $params.min_feature_expr
     """
 }
 
